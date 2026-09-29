@@ -16,11 +16,22 @@ DATASETS = {
 
 
 # ============================================================
-# 2. 특징 추출 함수
+# 2. 샘플링 주파수
+#
+# 1 ms 간격
+# → 0.001초
+# → 1 / 0.001 = 1000 Hz
+# ============================================================
+
+FS = 1000
+
+
+# ============================================================
+# 3. 시간영역 특징 추출
 # ============================================================
 
 
-def extract_features(signal):
+def extract_time_features(signal):
 
     signal = np.asarray(signal, dtype=float)
 
@@ -28,13 +39,11 @@ def extract_features(signal):
     rms = np.sqrt(np.mean(signal**2))
 
     # 첨도
-    # fisher=False → 정규분포의 첨도 = 3
+    # fisher=False → 정규분포 첨도 = 3
     kurt = kurtosis(signal, fisher=False, bias=False)
 
-    # 최댓값
+    # 최댓값 / 최솟값
     max_value = np.max(signal)
-
-    # 최솟값
     min_value = np.min(signal)
 
     # 절대 Peak
@@ -64,7 +73,120 @@ def extract_features(signal):
 
 
 # ============================================================
-# 3. 데이터셋 하나 처리
+# 4. 주파수영역 특징 추출
+# ============================================================
+
+
+def extract_frequency_features(signal, fs):
+
+    signal = np.asarray(signal, dtype=float)
+
+    n = len(signal)
+
+    # 너무 짧은 신호 방지
+    if n < 2:
+
+        return {
+            "dominant_freq": np.nan,
+            "spectral_centroid": np.nan,
+            "spectral_energy": np.nan,
+            "spectral_entropy": np.nan,
+        }
+
+    # --------------------------------------------------------
+    # 평균 제거
+    #
+    # DC 성분이 dominant frequency로 잡히는 것을 방지
+    # --------------------------------------------------------
+
+    signal_centered = signal - np.mean(signal)
+
+    # --------------------------------------------------------
+    # FFT
+    # --------------------------------------------------------
+
+    fft_values = np.fft.rfft(signal_centered)
+
+    frequencies = np.fft.rfftfreq(n, d=1 / fs)
+
+    # --------------------------------------------------------
+    # Magnitude Spectrum
+    # --------------------------------------------------------
+
+    magnitude = np.abs(fft_values)
+
+    # DC(0 Hz) 제거
+    if len(magnitude) > 0:
+
+        magnitude[0] = 0
+
+    # ========================================================
+    # 1. Dominant Frequency
+    #
+    # 가장 강한 진동 주파수
+    # ========================================================
+
+    dominant_index = np.argmax(magnitude)
+
+    dominant_freq = frequencies[dominant_index]
+
+    # ========================================================
+    # 2. Spectral Centroid
+    #
+    # 주파수 에너지의 중심
+    # ========================================================
+
+    magnitude_sum = np.sum(magnitude)
+
+    if magnitude_sum != 0:
+
+        spectral_centroid = np.sum(frequencies * magnitude) / magnitude_sum
+
+    else:
+
+        spectral_centroid = 0
+
+    # ========================================================
+    # 3. Spectral Energy
+    #
+    # FFT 전체 에너지
+    # ========================================================
+
+    spectral_energy = np.sum(magnitude**2)
+
+    # ========================================================
+    # 4. Spectral Entropy
+    #
+    # 주파수 에너지가
+    # 얼마나 퍼져있는지를 표현
+    # ========================================================
+
+    power = magnitude**2
+
+    power_sum = np.sum(power)
+
+    if power_sum != 0:
+
+        probability = power / power_sum
+
+        probability = probability[probability > 0]
+
+        spectral_entropy = -np.sum(probability * np.log2(probability))
+
+    else:
+
+        spectral_entropy = 0
+
+    return {
+        "dominant_freq": dominant_freq,
+        "spectral_centroid": spectral_centroid,
+        "spectral_energy": spectral_energy,
+        "spectral_entropy": spectral_entropy,
+    }
+
+
+# ============================================================
+# 5. 데이터셋 하나 처리
 # ============================================================
 
 
@@ -82,13 +204,13 @@ def process_dataset(file_path, dataset_name):
     df = df.sort_values("timestamp").reset_index(drop=True)
 
     # ========================================================
-    # 4. 시간 차이 계산
+    # 6. 시간 차이 계산
     # ========================================================
 
     df["time_diff"] = df["timestamp"].diff()
 
     # ========================================================
-    # 5. Segment 분리
+    # 7. Segment 분리
     #
     # 내부 데이터는 약 1ms 간격
     # 1초 이상 벌어지면 새로운 측정 Segment
@@ -107,7 +229,7 @@ def process_dataset(file_path, dataset_name):
     print("측정 Segment 수:", df["segment"].nunique())
 
     # ========================================================
-    # 6. Segment별 행 개수 확인
+    # 8. Segment 크기 확인
     # ========================================================
 
     segment_sizes = df.groupby("segment").size()
@@ -117,10 +239,7 @@ def process_dataset(file_path, dataset_name):
     print(segment_sizes.value_counts().sort_index())
 
     # ========================================================
-    # 7. 센서 컬럼 선택
-    #
-    # timestamp / time_diff / segment 제외
-    # 숫자형 컬럼만 사용
+    # 9. 센서 컬럼 선택
     # ========================================================
 
     exclude_cols = {"timestamp", "time_diff", "segment"}
@@ -136,7 +255,7 @@ def process_dataset(file_path, dataset_name):
     print(sensor_cols)
 
     # ========================================================
-    # 8. Segment별 특징 추출
+    # 10. Segment별 특징 추출
     # ========================================================
 
     result_rows = []
@@ -159,22 +278,37 @@ def process_dataset(file_path, dataset_name):
 
             signal = group[col].dropna().values
 
-            # 데이터가 없으면 건너뜀
             if len(signal) == 0:
                 continue
 
-            features = extract_features(signal)
+            # =================================================
+            # 시간영역 특징
+            # =================================================
 
-            for feature_name, value in features.items():
+            time_features = extract_time_features(signal)
 
-                column_name = f"{col}_{feature_name}"
+            for feature_name, value in time_features.items():
+
+                column_name = f"{col}_" f"{feature_name}"
+
+                row[column_name] = value
+
+            # =================================================
+            # 주파수영역 특징
+            # =================================================
+
+            frequency_features = extract_frequency_features(signal, FS)
+
+            for feature_name, value in frequency_features.items():
+
+                column_name = f"{col}_" f"{feature_name}"
 
                 row[column_name] = value
 
         result_rows.append(row)
 
     # ========================================================
-    # 9. 특징 DataFrame 생성
+    # 11. 특징 DataFrame 생성
     # ========================================================
 
     feature_df = pd.DataFrame(result_rows)
@@ -183,7 +317,7 @@ def process_dataset(file_path, dataset_name):
 
 
 # ============================================================
-# 10. 세 데이터셋 각각 처리
+# 12. 세 데이터셋 각각 처리
 # ============================================================
 
 for dataset_name, file_path in DATASETS.items():
@@ -191,10 +325,10 @@ for dataset_name, file_path in DATASETS.items():
     feature_df = process_dataset(file_path=file_path, dataset_name=dataset_name)
 
     # ========================================================
-    # 11. 세트별 별도 저장
+    # 13. 세트별 별도 저장
     # ========================================================
 
-    output_path = f"data/{dataset_name}_features.csv"
+    output_path = f"data/" f"{dataset_name}_features.csv"
 
     feature_df.to_csv(output_path, index=False)
 
