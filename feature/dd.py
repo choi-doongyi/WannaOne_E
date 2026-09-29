@@ -85,4 +85,35 @@ print("각 데이터에 RMS, 첨도, 최댓값, 파고율 컬럼이 들어갔는
 print(df1.head(3))
 print(df2.head(3))
 print(df3.head(3))
-#
+# 각 생성된 컬럼들을 시계열 분석
+features = ["RMS", "Kurtosis", "Max", "Crest_Factor"]
+
+
+# 시계열 그래프
+### 한눈에 3개 비교
+def plot_three_rows(df1, df2, df3):
+    data_list = [
+        (df1, "data1", "blue"),
+        (df2, "data2", "orange"),
+        (df3, "data3", "green"),
+    ]
+
+    for col in features:
+        fig, axes = plt.subplots(3, 1, figsize=(12, 8))
+
+        for ax, (df, name, color) in zip(axes, data_list):
+            df_ = df.copy()
+
+            ax.plot(df_.index, df_[col], color=color)
+            ax.set_title(f"{name} - {col}")
+            ax.set_xlabel("Time")
+            ax.set_ylabel(col)
+            ax.grid(True)
+
+        plt.tight_layout()
+        plt.show()
+
+
+plot_three_rows(df1, df2, df3)
+# 3 데이터 모두 측정 종료시점에 max치가 치솟는 것으로 보아
+# 고장시점이라고 예상할 수 있음
