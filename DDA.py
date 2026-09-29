@@ -1,205 +1,77 @@
-from pathlib import Path
-
-import numpy as np
 import pandas as pd
-from scipy.stats import kurtosis
 
-# ============================================================
-# 1. 데이터셋 경로
-# ============================================================
-
-DATASETS = {
-    "set1": "data/test_set_1_1ms.csv",
-    "set2": "data/test_set_2_1ms.csv",
-    "set3": "data/test_set_3_1ms.csv",
-}
-
-
-# ============================================================
-# 2. 특징 추출 함수
-# ============================================================
-
-
-def extract_features(signal):
-
-    signal = np.asarray(signal, dtype=float)
-
-    # RMS
-    rms = np.sqrt(np.mean(signal**2))
-
-    # 첨도
-    # fisher=False → 정규분포의 첨도 = 3
-    kurt = kurtosis(signal, fisher=False, bias=False)
-
-    # 최댓값
-    max_value = np.max(signal)
-
-    # 최솟값
-    min_value = np.min(signal)
-
-    # 절대 Peak
-    peak = np.max(np.abs(signal))
-
-    # 파고율
-    if rms != 0:
-        crest_factor = peak / rms
-    else:
-        crest_factor = 0
-
-    # 표준편차
-    std = np.std(signal)
-
-    # Peak-to-Peak
-    peak_to_peak = max_value - min_value
-
-    return {
-        "rms": rms,
-        "kurtosis": kurt,
-        "max": max_value,
-        "min": min_value,
-        "crest_factor": crest_factor,
-        "std": std,
-        "peak_to_peak": peak_to_peak,
-    }
-
-
-# ============================================================
-# 3. 데이터셋 하나 처리
-# ============================================================
-
-
-def process_dataset(file_path, dataset_name):
-
-    file_path = Path(file_path)
-
-    # --------------------------------------------------------
-    # 데이터 불러오기
-    # --------------------------------------------------------
-
-    df = pd.read_csv(file_path, parse_dates=["timestamp"])
-
-    # 시간순 정렬
-    df = df.sort_values("timestamp").reset_index(drop=True)
-
-    # ========================================================
-    # 4. 시간 차이 계산
-    # ========================================================
-
-    df["time_diff"] = df["timestamp"].diff()
-
-    # ========================================================
-    # 5. Segment 분리
-    #
-    # 내부 데이터는 약 1ms 간격
-    # 1초 이상 벌어지면 새로운 측정 Segment
-    # ========================================================
-
-    GAP_THRESHOLD = pd.Timedelta(seconds=1)
-
-    df["segment"] = (df["time_diff"] > GAP_THRESHOLD).cumsum()
-
-    print("\n==============================")
-    print(dataset_name)
-    print("==============================")
-
-    print("원본 행 수:", len(df))
-
-    print("측정 Segment 수:", df["segment"].nunique())
-
-    # ========================================================
-    # 6. Segment별 행 개수 확인
-    # ========================================================
-
-    segment_sizes = df.groupby("segment").size()
-
-    print("\nSegment 크기 분포")
-
-    print(segment_sizes.value_counts().sort_index())
-
-    # ========================================================
-    # 7. 센서 컬럼 선택
-    #
-    # timestamp / time_diff / segment 제외
-    # 숫자형 컬럼만 사용
-    # ========================================================
-
-    exclude_cols = {"timestamp", "time_diff", "segment"}
-
-    sensor_cols = [
-        col
-        for col in df.select_dtypes(include=np.number).columns
-        if col not in exclude_cols
-    ]
-
-    print("\n사용 센서 컬럼")
-
-    print(sensor_cols)
-
-    # ========================================================
-    # 8. Segment별 특징 추출
-    # ========================================================
-
-    result_rows = []
-
-    for segment_id, group in df.groupby("segment"):
-
-        row = {
-            "dataset": dataset_name,
-            "segment": segment_id,
-            "start_time": group["timestamp"].iloc[0],
-            "end_time": group["timestamp"].iloc[-1],
-            "n_samples": len(group),
-        }
-
-        # ----------------------------------------------------
-        # 각 센서별 특징 추출
-        # ----------------------------------------------------
-
-        for col in sensor_cols:
-
-            signal = group[col].dropna().values
-
-            # 데이터가 없으면 건너뜀
-            if len(signal) == 0:
-                continue
-
-            features = extract_features(signal)
-
-            for feature_name, value in features.items():
-
-                column_name = f"{col}_{feature_name}"
-
-                row[column_name] = value
-
-        result_rows.append(row)
-
-    # ========================================================
-    # 9. 특징 DataFrame 생성
-    # ========================================================
-
-    feature_df = pd.DataFrame(result_rows)
-
-    return feature_df
-
-
-# ============================================================
-# 10. 세 데이터셋 각각 처리
-# ============================================================
-
-for dataset_name, file_path in DATASETS.items():
-
-    feature_df = process_dataset(file_path=file_path, dataset_name=dataset_name)
-
-    # ========================================================
-    # 11. 세트별 별도 저장
-    # ========================================================
-
-    output_path = f"data/{dataset_name}_features.csv"
-
-    feature_df.to_csv(output_path, index=False)
-
-    print("\n저장 완료")
-
-    print(output_path)
-
-    print("특징 데이터 Shape:", feature_df.shape)
+df1 = pd.read_csv("data/test_set_1_1ms.csv")
+df2 = pd.read_csv("data/test_set_2_1ms.csv")
+df3 = pd.read_csv("data/test_set_3_1ms.csv")
+
+# 각각의 데이터셋의 기간이 달라 특징이 다를 수 있기에 합치지않고 따로 계산
+data_set = [df1, df2, df3]
+for i in data_set:
+    # 1. 컬럼명
+    print("=" * 10, str(i), "=" * 10)
+    print("=" * 10, "column", "=" * 10)
+    print(i.columns.tolist())
+    print("=" * 10, "shape", "=" * 10)
+    print(i.shape)
+    print("=" * 10, "info", "=" * 10)
+    print(i.info())
+    print("=" * 10, "describe", "=" * 10)
+    print(i.describe().T)
+    print("=" * 10, "duplicated", "=" * 10)
+    print(i.duplicated().sum())
+    #  각 컬럼 고유값 개수
+    print("=" * 10, "nunique", "=" * 10)
+    print(i.nunique())
+
+    i["timestamp"] = pd.to_datetime(i["timestamp"])
+    print("start :", i["timestamp"].min())
+    print("end   :", i["timestamp"].max())
+
+    # 6. 시간 간격 확인
+    print("=" * 10, "time interval", "=" * 10)
+    print(i["timestamp"].sort_values().diff().value_counts().head(10))
+
+    # 7. 무한값 확인
+    numeric_cols = i.select_dtypes(include="number").columns
+    print("=" * 10, "infinite values", "=" * 10)
+    print(i[numeric_cols].isin([float("inf"), float("-inf")]).sum())
+    print()
+
+# 크기
+# df1 (2207744, 9)
+# df2 (503808, 9)
+# df3 (3237888, 9)
+# 자료형
+# 모두 타임스탬프 빼고 실수형자료
+# 이상치가 있는 것으로 추정
+# 셋 모두 중복 X
+# 대략 10분 정도의 시간간격이 모두 있다! 점검 시간이 존재할 가능성 높다.
+
+
+for df in data_set:
+
+    df = df.sort_values("timestamp").copy()
+
+    diff = df["timestamp"].diff()
+
+    # 정상 간격 1ms보다 큰 경우
+    gaps = diff[diff > pd.Timedelta(milliseconds=1)]
+
+    print(f"\n===== {str(df)} =====")
+    print("전체 gap 개수:", len(gaps))
+
+    print("\nGap 크기 상위:")
+    print(gaps.value_counts().head(10))
+
+    # gap 때문에 나뉘는 측정 구간 수
+    print("측정 segment 수:", len(gaps) + 1)
+
+
+# 10분 주기로 1ms동안 측정된 사이클 데이터입니다.
+# 약 10분 주기로 터보팬 엔진 신호를 짧은 구간 동안 1kHz로 수집한 데이터로 보는게 타당하다.
+
+
+# 대부분의 데이터는 1ms 간격으로 수집되며
+# 일정 개수의 샘플 측정 후 약 10분의 간격을 두고 다음 측정이 수행된다.
+# Dataset 1은 주로 1,024 samples, Dataset 2·3은 512 samples 단위의 측정 세션으로 구성된 것으로 추정된다.
+# 따라서 약 10분의 시간 간격은 결측보다는 데이터 수집 주기에 따른 측정 간 공백일 가능성이 높다.
