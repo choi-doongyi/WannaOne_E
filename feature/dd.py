@@ -68,7 +68,9 @@ channels = [
     "channel_7",
     "channel_8",
 ]
-for df in [df1, df2, df3]:
+
+data_set = [df1, df2, df3]
+for df in data_set:
     # RMS
     df["RMS"] = np.sqrt((df[channels] ** 2).mean(axis=1))
 
