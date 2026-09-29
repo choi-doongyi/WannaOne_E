@@ -119,3 +119,59 @@ def plot_three_rows(df1, df2, df3):
 plot_three_rows(df1, df2, df3)
 # 3 데이터 모두 측정 종료시점에 max치가 치솟는 것으로 보아
 # 고장시점이라고 예상할 수 있음
+
+
+# 새 컬럼들에 대해서 z_score 이상치 탐색해보기
+# 이상치 수
+def detect_outliers_zscore(df, name, features, threshold=3):
+    df_z = df.copy()
+
+    print("=====================================")
+    print(f"{name} Z-score 이상치 탐색")
+
+    for col in features:
+        mean = df_z[col].mean()
+        std = df_z[col].std()
+
+        z_col = f"{col}_zscore"
+        outlier_col = f"{col}_outlier"
+
+        df_z[z_col] = (df_z[col] - mean) / std
+        df_z[outlier_col] = df_z[z_col].abs() > threshold
+
+        outlier_count = df_z[outlier_col].sum()
+
+        print(f"{col} 이상치 개수: {outlier_count}")
+
+    return df_z
+
+
+df1_z = detect_outliers_zscore(df1, "data1", features)
+df2_z = detect_outliers_zscore(df2, "data2", features)
+df3_z = detect_outliers_zscore(df3, "data3", features)
+
+
+# 이상치 그래프 (3기준)
+def plot_zscore_outliers(df, name, features, threshold=3):
+    for col in features:
+        z_col = f"{col}_zscore"
+
+        plt.figure(figsize=(12, 4))
+        plt.plot(df.index, df[z_col], label="Z-score")
+        plt.axhline(threshold, color="red", linestyle="--", label=f"+{threshold}")
+        plt.axhline(-threshold, color="red", linestyle="--", label=f"-{threshold}")
+        plt.title(f"{name} - {col} Z-score")
+        plt.xlabel("Index")
+        plt.ylabel("Z-score")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+
+# plot_zscore_outliers(df1_z, "data1 z", features)
+
+# plot_zscore_outliers(df2_z, "data2 z", features)
+
+plot_zscore_outliers(df3_z, "data3 z", features)
+
+###
