@@ -85,4 +85,4 @@ print("각 데이터에 RMS, 첨도, 최댓값, 파고율 컬럼이 들어갔는
 print(df1.head(3))
 print(df2.head(3))
 print(df3.head(3))
-# fdgvnmkl,.;324567
+#
