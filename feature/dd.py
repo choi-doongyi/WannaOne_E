@@ -87,11 +87,11 @@ print("각 데이터에 RMS, 첨도, 최댓값, 파고율 컬럼이 들어갔는
 print(df1.head(3))
 print(df2.head(3))
 print(df3.head(3))
-# 각 생성된 컬럼들을 시계열 분석
+### 각 생성된 컬럼들을 시계열 분석
 features = ["RMS", "Kurtosis", "Max", "Crest_Factor"]
 
 
-# 시계열 그래프
+### 시계열 그래프
 ### 한눈에 3개 비교
 def plot_three_rows(df1, df2, df3):
     data_list = [
@@ -117,12 +117,12 @@ def plot_three_rows(df1, df2, df3):
 
 
 plot_three_rows(df1, df2, df3)
-# 3 데이터 모두 측정 종료시점에 max치가 치솟는 것으로 보아
-# 고장시점이라고 예상할 수 있음
+### 3 데이터 모두 측정 종료시점에 max치가 치솟는 것으로 보아
+### 고장시점이라고 예상할 수 있음
 
 
-# 새 컬럼들에 대해서 z_score 이상치 탐색해보기
-# 이상치 수
+### 새 컬럼들에 대해서 z_score 이상치 탐색해보기
+### 이상치 수
 def detect_outliers_zscore(df, name, features, threshold=3):
     df_z = df.copy()
 
@@ -151,7 +151,7 @@ df2_z = detect_outliers_zscore(df2, "data2", features)
 df3_z = detect_outliers_zscore(df3, "data3", features)
 
 
-# 이상치 그래프 (3기준)
+### 이상치 그래프 (3기준)
 def plot_zscore_outliers(df, name, features, threshold=3):
     for col in features:
         z_col = f"{col}_zscore"
@@ -168,10 +168,18 @@ def plot_zscore_outliers(df, name, features, threshold=3):
         plt.show()
 
 
-# plot_zscore_outliers(df1_z, "data1 z", features)
+# plot_zscore_outliers(df1_z, "data1 z", features)       ### threshold=3인 z_score 그래프를 보여줌
 
 # plot_zscore_outliers(df2_z, "data2 z", features)
 
 plot_zscore_outliers(df3_z, "data3 z", features)
 
-###
+### 컬럼의 수가 많아 z_score만으로 이상을 탐지하는데 한계가 있다고 판단하여
+### isolationForest를 사용하여 모델학습을 하려함
+
+X = df[["RMS", "Kurtosis", "Max", "Crest_Factor"]]
+model_iso = IsolationForest(
+    n_estimators=100, contamination=0.01, random_state=42
+)  # 1%를 이상치로 판단
+model_iso.fit(X)
+pred = model_iso.predict(X)
