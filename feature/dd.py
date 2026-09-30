@@ -177,9 +177,24 @@ plot_zscore_outliers(df3_z, "data3 z", features)
 ### 컬럼의 수가 많아 z_score만으로 이상을 탐지하는데 한계가 있다고 판단하여
 ### isolationForest를 사용하여 모델학습을 하려함
 
-X = df[["RMS", "Kurtosis", "Max", "Crest_Factor"]]
-model_iso = IsolationForest(
-    n_estimators=100, contamination=0.01, random_state=42
-)  # 1%를 이상치로 판단
-model_iso.fit(X)
-pred = model_iso.predict(X)
+X1 = df1[["RMS", "Kurtosis", "Max", "Crest_Factor"]]
+X2 = df2[["RMS", "Kurtosis", "Max", "Crest_Factor"]]
+X3 = df3[["RMS", "Kurtosis", "Max", "Crest_Factor"]]
+# 1%를 이상치로 판단
+model_iso1 = IsolationForest(n_estimators=100, contamination=0.01, random_state=42)
+model_iso2 = IsolationForest(n_estimators=100, contamination=0.01, random_state=42)
+model_iso3 = IsolationForest(n_estimators=100, contamination=0.01, random_state=42)
+
+pred1 = model_iso1.fit_predict(X1)
+pred2 = model_iso2.fit_predict(X2)
+pred3 = model_iso3.fit_predict(X3)
+
+df1["iso_pred"] = pred1
+df2["iso_pred"] = pred2
+df3["iso_pred"] = pred3
+
+model_iso1.fit(X1)
+pred2 = model_iso1.predict(X2)
+# df1을 정상 기준으로 두고 df2를 판단
+pred2 = model_iso2.fit_predict(X2)
+# df2 내부 분포 기준으로 df2의 이상치를 판단
