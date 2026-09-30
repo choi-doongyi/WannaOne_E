@@ -175,18 +175,17 @@ def plot_zscore_outliers(df, name, features, threshold=3):
 plot_zscore_outliers(df3_z, "data3 z", features)
 
 
-####  이동 z_score로 이상구간 탐지
-
+####  이동 z_score로 이상구간 탐지(이탈 시점 탐지)
+## 이동평균이 아닌 이동 중앙값 robust z_score로 판정하였음
 print("=================================")
 
 
-def detect_departure_by_baseline_zscore(
+def detect_departure_by_baseline_robust_zscore(
     df,
     name,
     features,
     baseline_ratio=0.1,
-    rolling_window=1000,
-    threshold=3,
+    threshold=3.5,
     consecutive=10,
 ):
     df_ = df.copy()
@@ -199,23 +198,20 @@ def detect_departure_by_baseline_zscore(
     print(f"{name} baseline size:", baseline_size)
 
     for col in features:
-        baseline_mean = baseline[col].mean()
-        baseline_std = baseline[col].std()
+        baseline_median = baseline[col].median()
+        baseline_mad = np.median(np.abs(baseline[col] - baseline_median))
 
-        # 표준편차가 0이면 계산 불가 방지
-        if baseline_std == 0:
-            print(f"{col}: baseline std가 0이라 z-score 계산 불가")
+        # MAD가 0이면 계산 불가 방지
+        if baseline_mad == 0:
+            print(f"{col}: baseline MAD가 0이라 robust z-score 계산 불가")
             continue
 
-        # 이동평균
-        rolling_mean = df_[col].rolling(window=rolling_window, min_periods=1).mean()
+        # 초기 정상 구간 기준 robust z-score
+        rz_col = f"{col}_baseline_robust_zscore"
+        outlier_col = f"{col}_robust_departure"
 
-        # 초기 정상 구간 기준 z-score
-        z_col = f"{col}_baseline_zscore"
-        outlier_col = f"{col}_departure"
-
-        df_[z_col] = (rolling_mean - baseline_mean) / baseline_std
-        df_[outlier_col] = df_[z_col].abs() > threshold
+        df_[rz_col] = 0.6745 * (df_[col] - baseline_median) / baseline_mad
+        df_[outlier_col] = df_[rz_col].abs() > threshold
 
         # 연속으로 threshold 초과하는 구간 탐지
         consecutive_flag = (
@@ -226,8 +222,8 @@ def detect_departure_by_baseline_zscore(
         departure_points = df_[consecutive_flag]
 
         print(f"\n{name} - {col}")
-        print("baseline mean:", baseline_mean)
-        print("baseline std:", baseline_std)
+        print("baseline median:", baseline_median)
+        print("baseline MAD:", baseline_mad)
 
         if len(departure_points) > 0:
             departure_time = departure_points.index[0]
@@ -238,16 +234,18 @@ def detect_departure_by_baseline_zscore(
     return df_
 
 
-df1_depart = detect_departure_by_baseline_zscore(df1, "data1", features)
-df2_depart = detect_departure_by_baseline_zscore(df2, "data2", features)
-df3_depart = detect_departure_by_baseline_zscore(df3, "data3", features)
-
+## 실행
+df1_depart = detect_departure_by_baseline_robust_zscore(df1, "data1", features)
+df2_depart = detect_departure_by_baseline_robust_zscore(df2, "data2", features)
+df3_depart = detect_departure_by_baseline_robust_zscore(df3, "data3", features)
 
 print("=================================")
 
 
 ### 컬럼의 수가 많아 z_score만으로 이상을 탐지하는데 한계가 있다고 판단하여
 ### isolationForest를 사용하여 모델학습을 하려함
+### 권장 분석흐름이 z_score 기반을 추천해서 보류
+
 
 X1 = df1[["RMS", "Kurtosis", "Max", "Crest_Factor"]]
 X2 = df2[["RMS", "Kurtosis", "Max", "Crest_Factor"]]
@@ -265,8 +263,8 @@ df1["iso_pred"] = pred1
 df2["iso_pred"] = pred2
 df3["iso_pred"] = pred3
 
-# model_iso1.fit(X1)
-# pred2 = model_iso1.predict(X2)
+model_iso1.fit(X1)
+pred2 = model_iso1.predict(X2)
 # df1을 정상 기준으로 두고 df2를 판단
-# pred2 = model_iso2.fit_predict(X2)
+pred2 = model_iso2.fit_predict(X2)
 # df2 내부 분포 기준으로 df2의 이상치를 판단
